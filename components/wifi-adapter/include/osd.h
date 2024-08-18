@@ -7,3 +7,4 @@ bool write_settings(bool full);
 
 
 extern void osd_task(void*);
+extern void drawstate(char* txt, int count, int pos, int fill);

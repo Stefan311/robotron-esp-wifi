@@ -6,7 +6,8 @@
 
     .data
 Reg_Save:
-    .space      24
+    .space      32
+
 
     .section .iram1,"ax"
     .global     xt_highint5
@@ -20,6 +21,8 @@ xt_highint5:
     s32i    a14, a0, 4
     s32i    a13, a0, 8
     s32i    a12, a0, 12
+    s32i    a11, a0, 24
+    s32i    a10, a0, 28
 
 /*
     // DEBUG-Impuls auf GPIO14, bei Bedarf an beliebige Stelle kopieren
@@ -33,21 +36,6 @@ xt_highint5:
     l32i    a13, a0, 20
     // DEBUG Ende
 */
-/*  dieser Softwar-Filter scheint eher kontraproduktiv zu sein, deshalb erstmal deaktiviert
-    // warten, bis das BSYN-Signal sich nicht mehr ändert
-xt_highint5_L12:
-    movi    a14, 5                                  // Anzahl Schleifendurchgänge
-xt_highint5_L13:
-    mov     a12, a13                                // GPIO-Wert des letzen Durchgangs sichern. Beim ersten Durchgang steht hier Müll drin, das macht aber nichts
-    movi    a13, SYNC_PIN_REG                       // Adresse vom GPIO-Port1
-    movi    a15, SYNC_BIT_VAL                       // nur 1 Bit davon
-    l32i    a13, a13, 0                             // Wert laden
-    and     a13, a13, a15                           // AND 1-Bitmuster
-    bne     a12, a13, xt_highint5_L12               // Schleife von ganz vorn wiederholen, wenn sich der GPIO-Wert geändert hat
-    addi    a14, a14, -1                            // Schleifenzähler reduzieren
-    bnez    a14, xt_highint5_L13                    // bis 0 wiederholen
-    bnez    a13, xt_highint5_L14                    // sollte an der Stelle das BSYN bereits HIGH sein, dann war das ein Fehl-Interrupt: Ende
-*/
 
     // SPI Transfer stoppen
     movi    a15, DR_REG_SPI1_BASE + 0x22000         // Adresse des SPI-Steuerregisters
@@ -60,17 +48,6 @@ xt_highint5_L13:
 
     // Scanline +1 hochzählen
     addi    a14, a14, 1
-
-    // Behandlung des Interleaves: Zähler hochzählen
-    movi    a15, ABG_Interleave                     // Interleave-Zähler laden
-    l32i    a13, a15, 0
-    movi    a12, ABG_Interleave_Mask                // Interleave-Maske laden
-    l32i    a12, a12, 0
-    bnei    a14, 1, xt_highint5_L11                 // Wenn Scanline != 1, dann weiter
-    addi    a13, a13, 1                             // Interleave-Zähler +1
-    and     a13, a13, a12                           // mit Zähler UND-verknüpfen
-    s32i    a13, a15, 0                             // und speichern
-xt_highint5_L11:
 
     // Warteschleife initialisieren
     movi    a12, 55                                // Timeout-Counter (~5,5µs)
@@ -105,14 +82,6 @@ xt_highint5_L4:
     s32i    a13, a15, 0                             // Wert schreiben
 xt_highint5_L5:
 
-    // Testen, ob vom Interleave her diese Zeile eingelesen werden soll
-    movi    a13, ABG_Interleave                     // Interleave-Zähler laden
-    l32i    a13, a13, 0
-    movi    a12, ABG_Interleave_Mask                // Interleave-Maske laden
-    l32i    a12, a12, 0
-    and     a15, a14, a12                           // Scanline mit Interleave-Maske UND-Verknüpfen
-    bne     a13, a15, xt_highint5_L3                // wenn Interleave-Zähler != Scanline --> Ende
-
     // Testen, ob wir schon an der Startline vorbei sind
     movi    a15, ABG_START_LINE                     // Startline laden
     l32i    a15, a15, 0
@@ -130,14 +99,21 @@ xt_highint5_L10:
     bnez    a12, xt_highint5_L10
 
     // DMA-Buffer-Parameter-Liste bearbeiten
+    movi    a10, 8                                  // _ABG_SAMPLE_BUFFER_COUNT
     movi    a15, ABG_DMALIST                        // Zeiger auf Zeiger auf die Parameterliste vom DMA-Kontroller
     l32i    a15, a15, 0                             // Zeiger laden
     movi    a13, 0xc0000000                         // Frei-Kennung
+
+    // eine freinen DMA-Buffer finden
+xt_highint5_L7:
     l32i    a12, a15, 0                             // Parameter vom 1. Buffer laden
     beq     a12, a13, xt_highint5_L6                // Frei? --> L6
     addi    a15, a15, 16                            // ein Buffer weiter
-    l32i    a12, a15, 0                             // Parameter vom 2. Buffer laden
-    bne     a12, a13, xt_highint5_L3                // auch nicht frei? --> L3
+    addi    a10, a10, -1
+    bnez    a10, xt_highint5_L7
+    j       xt_highint5_L3                          // --> Ende
+
+    // DMA-Buffer-Parameter aktualisieren
 xt_highint5_L6:
     movi    a13, 0xc0ffffff                         // DMA-Parameter
     s32i    a13, a15, 0                             // in die Parameterliste schreiben
@@ -174,6 +150,8 @@ xt_highint5_L1:
     blti    a14, 16, xt_highint5_L3                 // Scanline <=15 ? dann ist das nicht der erste VSYNC in diesem Frame!
 
     // Scanline auf 0 setzen
+    movi    a15, ABG_Last_Scan_Line
+    s32i    a14, a15, 0
     movi    a14, 0
 
 xt_highint5_L3:
@@ -197,6 +175,8 @@ xt_highint5_L14:
     l32i    a14, a0, 4
     l32i    a13, a0, 8
     l32i    a12, a0, 12
+    l32i    a11, a0, 24
+    l32i    a10, a0, 28
 
     // Interrupt beenden
     rsr     a0, EXCSAVE_5

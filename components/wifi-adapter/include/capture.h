@@ -2,4 +2,5 @@
 #include <esp_heap_caps.h>
 
 void setup_abg();
-void capture_task(void*);
+void web_capture_bmp_image();
+void update_pixel_steplist();

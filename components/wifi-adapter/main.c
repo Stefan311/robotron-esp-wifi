@@ -11,6 +11,7 @@
 #include "vga.h"
 #include "capture.h"
 #include "pins.h"
+#include "webserver.h"
 
 
 // Hauptprogramm
@@ -20,8 +21,15 @@ void IRAM_ATTR app_main(void)
 	// NVS Einstellungen laden, wenn vorhanden
 	restore_settings();
 
+//	heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
 	setup_vga();
+    bmp_img = heap_caps_malloc(1024 * ABG_YRes, MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM);
+    bmp_line_length = heap_caps_malloc(2 * ABG_YRes, MALLOC_CAP_INTERNAL);
+    osd_bmp_img = heap_caps_malloc(1024 * 40, MALLOC_CAP_DEFAULT | MALLOC_CAP_SPIRAM);
+    osd_bmp_length = heap_caps_malloc(2 * 40, MALLOC_CAP_INTERNAL);
+
+    setup_abg();
 	xTaskCreatePinnedToCore(osd_task,"osd_task",6000,NULL,0,NULL,0);
-	xTaskCreatePinnedToCore(capture_task,"capture_task",6000,NULL,10,NULL,1);
+	setup_wlan();
 }
 

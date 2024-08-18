@@ -20,6 +20,15 @@ char next_app_name[17];
 uint8_t next_app_id;
 uint8_t wps_app_id = 0;
 
+// Farbtabelle zum Umsetzen der VGA-Farbe zum BMP-Farbindex. Wird während der Kompression gesetzt
+uint8_t bmp_osd_color_index[64] = 
+{
+	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
+	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
+	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,
+	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff
+};
+
 // Zeichensatz für das OSD-Textfeld
 unsigned char CHARSET[] =
 {
@@ -125,7 +134,7 @@ unsigned char CHARSET[] =
 	0x08, 0x1c, 0x2a, 0x08, 0x08, 0x00   // \x83 pfeil links
 };
 
-// Text in die OSD-Zeile drucken
+// Text in die 1. OSD-Zeile drucken
 static void drawtext(char* txt, int count, int pos, int fill, bool selected)
 {
 	char color = selected ? 0x03 : (pos>64 ? 0x2a : 0x3f);
@@ -141,19 +150,19 @@ static void drawtext(char* txt, int count, int pos, int fill, bool selected)
 			}
 			for (int d=0;d<7;d++)
 			{
-				OSD_BUF[b+(pos+a)*7+(d+1)*ABG_XRes+1] = (((1 << d) & c) != 0) ? color : bkcolor;
+				OSD_BUF[b+(pos+a)*7+(d+1)*640+1] = (((1 << d) & c) != 0) ? color : bkcolor;
 			}
 			OSD_BUF[(pos+a)*7+b+1] = bkcolor;
-			OSD_BUF[(pos+a)*7+b+8*ABG_XRes+1] = bkcolor;
+			OSD_BUF[(pos+a)*7+b+8*640+1] = bkcolor;
 		}
 		for (int d=0;d<9;d++)
 		{
-			OSD_BUF[(pos+a)*7+d*ABG_XRes] = bkcolor;
+			OSD_BUF[(pos+a)*7+d*640] = bkcolor;
 		}
 	}
 }
 
-// Text in die OSD-Zeile drucken
+// Text in die 2. OSD-Zeile drucken
 static void drawhint(char* txt, int count, int pos, int fill)
 {
 	for (int a=0;a<fill;a++)
@@ -167,10 +176,144 @@ static void drawhint(char* txt, int count, int pos, int fill)
 			}
 			for (int d=0;d<7;d++)
 			{
-				OSD_BUF[b+(pos+a)*7+(d+11)*ABG_XRes] = (((1 << d) & c) != 0) ? 0x2a : 0x00;
+				OSD_BUF[b+(pos+a)*7+(d+11)*640] = (((1 << d) & c) != 0) ? 0x2a : 0x00;
 			}
 		}
 	}
+}
+
+// Text in die 3. OSD-Zeile drucken
+void drawstate(char* txt, int count, int pos, int fill)
+{
+	for (int a=0;a<fill;a++)
+	{
+		for (int b=0;b<6;b++)
+		{
+			char c=0;
+			if (a<count)
+			{
+				c = CHARSET[(txt[a]-32)*6+b];
+			}
+			for (int d=0;d<7;d++)
+			{
+				OSD_BUF[b+(pos+a)*7+(d+21)*640] = (((1 << d) & c) != 0) ? 0x2a : 0x00;
+			}
+		}
+	}
+}
+
+// 6-Bit VGA Farbe in 24-Bit BMP Farbe umrechnen
+uint32_t vga_to_bmp_color(uint8_t c)
+{
+	return ((((c>>4)&3)*0x55)<<16) | ((((c>>2)&3)*0x55)<<8) | ((((c>>0)&3)*0x55));
+}
+
+// Pixel aus VGA-Buffer holen und in BMP-Palette-Offset umrechnen
+uint8_t get_osd_bmp_pixel(uint32_t index)
+{
+	uint8_t c = OSD_BUF[index] & 0x3f;
+	uint8_t i = bmp_osd_color_index[c];
+	if (i == 0xff) // das Erste mal für diese Farbe
+	{
+		for (uint8_t z=0; z<10; z++)	// BMP-Palette nach leerem Platz durchsuchen
+		{
+			uint32_t n = vga_to_bmp_color(c);
+			if (n == bmp_palette[z])
+			{
+				bmp_osd_color_index[c] = z; // für später merken
+				i = z;
+				break;
+			}
+
+			if (bmp_palette[z] == 0xffffffff)	// Da iss einer!
+			{
+				bmp_palette[z] = n;  // belegen!
+				bmp_osd_color_index[c] = z; // für später merken
+				i = z;
+				break;
+			}
+		}
+	}
+	if (i == 0xff)	// Das heißt die BMP-Palette ist voll?
+	{
+		printf("Out of Color! %d\n", c);
+		bmp_osd_color_index[c] = 0;
+		i = 0;
+	}
+	return i;
+}
+
+// OSD-Zeilen BMP-RLE-Komprimieren
+void bmp_compress_osd()
+{
+	for (uint8_t y=0; y<20; y++)
+	{
+		uint8_t val1 = 0;
+		uint8_t val2 = 0;
+		uint8_t rep = 0;
+		uint8_t* bmpst = (uint8_t*)((int)osd_bmp_img + ((osd_bmp_index ? y : y+20)*1024));
+		uint8_t* bmppos = bmpst;
+		for (uint16_t x=0; x<640;)
+		{
+			if (rep == 0)
+			{
+				val1 = get_osd_bmp_pixel(x+y*640);
+				x++;
+				val2 = get_osd_bmp_pixel(x+y*640);
+				x++;
+				rep = 2;
+			}
+			if (get_osd_bmp_pixel(x+y*640) != val1) 
+			{
+				*bmppos = rep;
+				bmppos++;
+				*bmppos = val2 | val1<<4;
+				bmppos++;
+				rep = 0;
+				continue;
+			}
+			else
+			{
+				x++;
+				rep++;
+			}
+			if (get_osd_bmp_pixel(x+y*640) != val2) 
+			{
+				*bmppos = rep;
+				bmppos++;
+				*bmppos = val2 | val1<<4;
+				bmppos++;
+				rep = 0;
+				continue;
+			}
+			else
+			{
+				x++;
+				rep++;
+			}
+			if (rep>253) 
+			{
+				*bmppos = rep;
+				bmppos++;
+				*bmppos = val2 | val1<<4;
+				bmppos++;
+				rep = 0;
+			}
+		}
+		if (rep>0)
+		{
+			*bmppos = rep;
+			bmppos++;
+			*bmppos = val2 | val1<<4;
+			bmppos++;
+		}
+		*bmppos = 0;
+		bmppos++;
+		*bmppos = 0;
+		bmppos++;
+		osd_bmp_length[osd_bmp_index ? y : y+20] = bmppos - bmpst;
+	}
+	osd_bmp_index = !osd_bmp_index;
 }
 
 // NVS Partition initialisieren und Daten vom Flash laden, wenn vorhanden
@@ -297,11 +440,21 @@ bool restore_settings() {
 	BSYNC_PIXEL_ABSTAND = (float)nvs_pixel_abstand / 100;
 	ABG_START_LINE = nvs_start_line;
 	ABG_PIXEL_PER_LINE = (float)nvs_pixel_per_line / 100;
-	ABG_Interleave_Mask = _STATIC_SYS_VALS[nvs_mode].interleave_mask;	
 	ABG_XRes = _STATIC_SYS_VALS[nvs_mode].xres;
 	ABG_YRes = _STATIC_SYS_VALS[nvs_mode].yres;
 	ABG_Bits_per_sample = _STATIC_SYS_VALS[nvs_mode].bits_per_sample;
-	printf("Zuweisung erledigt (%d, %f, %ld, %f)\n", ACTIVESYS, BSYNC_PIXEL_ABSTAND, ABG_START_LINE, ABG_PIXEL_PER_LINE);
+	nvs_get_u8(sys_nvs_handle, _NVS_SETTING_WPS_MODE, &wps_mode);
+	size_t i = 63;
+	nvs_get_str(sys_nvs_handle, _NVS_SETTING_SSID, wlan_ssid, &i);
+	i = 63;
+	nvs_get_str(sys_nvs_handle, _NVS_SETTING_PASSWD, wlan_passwd, &i);
+
+	for (uint8_t i=0; i<4; i++)
+	{
+		bmp_palette[i] = vga_to_bmp_color(_STATIC_SYS_VALS[ACTIVESYS].colors[i]);
+	}
+
+	printf("Zuweisung erledigt (%d, %f, %ld, %f, %d)\n", ACTIVESYS, BSYNC_PIXEL_ABSTAND, ABG_START_LINE, ABG_PIXEL_PER_LINE, wps_mode);
 
 	return true;
 }
@@ -354,17 +507,22 @@ void osd_task(void*)
 	};
 	ESP_ERROR_CHECK(gpio_config(&pincfg));
 
-	char* tb = heap_caps_malloc(90, MALLOC_CAP_INTERNAL);
+	char tb[90];
 	int cursor = 1;
-	for (int h=0;h<20*ABG_XRes;h++) OSD_BUF[h]=0x0;
+	for (int h=0;h<30*640;h++) OSD_BUF[h]=0x0;
 
 	int j = 0;
 	bool nvs_saved = false;
 
+	int l = snprintf(tb,90,"SSID=                                Status=aus         IP=keine");
+	drawstate(tb, l, 0, 90);
+	l = snprintf(tb,90,"%s",wlan_ssid);
+	drawstate(tb, l, 5, 32);
+
 	while (1)
 	{
 		// Menü ausgeben
-		int l = snprintf(tb, 40, this_app_name);
+		l = snprintf(tb, 40, this_app_name);
 		drawtext(tb,l,0,15,cursor==0);
 		l = snprintf(tb, 40, _STATIC_SYS_VALS[ACTIVESYS].name);
 		drawtext(tb,l,16,7,cursor==1);
@@ -437,6 +595,8 @@ void osd_task(void*)
 		}
 		drawhint(tb,l,0,90);
 
+		bmp_compress_osd();
+		
 		// darauf warten, dass alle Tasten losgelassen werden
 		while (gpio_get_level(PIN_NUM_TAST_LEFT)==0 || gpio_get_level(PIN_NUM_TAST_UP)==0 || gpio_get_level(PIN_NUM_TAST_DOWN)==0 || gpio_get_level(PIN_NUM_TAST_RIGHT)==0)
 		{
@@ -459,9 +619,9 @@ void osd_task(void*)
 			usleep(10000);
 			if (i==1)
 			{
-				if (cursor==1 && ABG_RUN)
+				if (cursor==1)
 				{
-					for (int h=0;h<20*ABG_XRes;h++) OSD_BUF[h]=0x0;
+					osd_aktiv = false;
 				}
 				else
 				{
@@ -471,6 +631,7 @@ void osd_task(void*)
 			if (i>0) i--;
 			j = 50;
 		}
+		osd_aktiv = true;
 
 		// cursor nach links
 		if (gpio_get_level(PIN_NUM_TAST_LEFT)==0)
@@ -495,7 +656,7 @@ void osd_task(void*)
 						const esp_partition_t *part = esp_partition_find_first(ESP_PARTITION_TYPE_APP, wps_app_id, NULL);
 						if (part!=NULL)
 						{
-							nvs_set_i16(sys_nvs_handle, _NVS_SETTING_WPS_MODE, 1);
+							nvs_set_u8(sys_nvs_handle, _NVS_SETTING_WPS_MODE, 1);
 							gpio_set_level(PIN_NUM_LED_WIFI, 0);
 							esp_ota_set_boot_partition(part);
 							esp_restart();
@@ -612,3 +773,4 @@ void osd_task(void*)
 		}
 	}
 }
+
