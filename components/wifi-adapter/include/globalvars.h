@@ -7,7 +7,7 @@
 // Statische Struktur - Systemkonstanten
 struct SYSSTATIC {
 	char* name;
-	uint8_t colors[4];
+	uint8_t swap_colors[4];
 	uint8_t bits_per_sample; // 4 oder 8
 	uint16_t xres; // 640 oder 720
 	uint16_t yres;
@@ -16,8 +16,16 @@ struct SYSSTATIC {
 	uint32_t default_pixel_per_line;
 };
 
+// Statische Struktur - Farben
+struct COLORSTATIC {
+	char* shortname;
+	char* longname;
+	uint32_t colors[4];
+};
+
 // Statische Werte vorinitialisiert
 extern const struct SYSSTATIC _STATIC_SYS_VALS[];
+extern const struct COLORSTATIC _STATIC_COLOR_VALS[];
 
 // Bezeichner für NVS KEY - max 15 Zeichen!
 #define _NVS_SETTING_MODE	"SMODE"
@@ -28,8 +36,11 @@ extern const struct SYSSTATIC _STATIC_SYS_VALS[];
 #define _NVS_SETTING_SSID	"SSID"
 #define _NVS_SETTING_PASSWD	"PASSWD"
 #define _ABG_SAMPLE_BUFFER_COUNT 8
+#define _NVS_SETTING_COLORSCHEMA	"COLORSCHEMA"
+#define _NVS_SETTING_CUSTOMCOLORS	"CUSTOMCOLORS"
 
-#define _SETTINGS_COUNT 3 // Anzahl unterstützter Computer = 3 (A7100,PC1715,EC1835)
+#define _SETTINGS_COUNT 6 // Anzahl unterstützter Computer (A7100,PC1715,EC1835,K7024,VIDEO3,VIS2A)
+#define _COLORSCHEME_COUNT 3 // Anzahl unterstützter Farbschema (+custom)
 
 // globale Variablen
 
@@ -69,4 +80,5 @@ extern char wlan_passwd[];
 extern uint16_t* bmp_line_length;
 extern uint8_t* bmp_img;
 extern uint32_t bmp_palette[10];
-
+extern int8_t Current_Color_Scheme;
+extern uint32_t Custom_Colors[4];

@@ -73,7 +73,7 @@ unsigned char CHARSET[] =
 	0x7F, 0x7F, 0x05, 0x05, 0x01, 0x00,  // F
 	0x3E, 0x7F, 0x41, 0x79, 0x78, 0x00,  // G
 	0x7F, 0x7F, 0x04, 0x7F, 0x7F, 0x00,  // H
-	0x7F, 0x7F, 0x00, 0x00, 0x00, 0x00,  // I
+	0x00, 0x7F, 0x7F, 0x00, 0x00, 0x00,  // I
 	0x00, 0x40, 0x40, 0x7F, 0x3F, 0x00,  // J
 	0x7F, 0x7F, 0x1C, 0x36, 0x63, 0x41,  // K
 	0x7F, 0x7F, 0x40, 0x40, 0x40, 0x00,  // L
@@ -105,7 +105,7 @@ unsigned char CHARSET[] =
 	0x7E, 0x7F, 0x05, 0x00, 0x00, 0x00,  // f
 	0x08, 0x5C, 0x54, 0x7C, 0x3C, 0x00,  // g
 	0x7F, 0x7F, 0x04, 0x7C, 0x78, 0x00,  // h
-	0x7D, 0x7D, 0x00, 0x00, 0x00, 0x00,  // i
+	0x00, 0x7D, 0x7D, 0x00, 0x00, 0x00,  // i
 	0x40, 0x7D, 0x3D, 0x00, 0x00, 0x00,  // j
 	0x7F, 0x7F, 0x38, 0x6C, 0x44, 0x00,  // k
 	0x7F, 0x7F, 0x00, 0x00, 0x00, 0x00,  // l
@@ -131,18 +131,21 @@ unsigned char CHARSET[] =
 	0x0c, 0x06, 0x7f, 0x06, 0x0c, 0x00,  // \x80 pfeil hoch
 	0x18, 0x30, 0x7f, 0x30, 0x18, 0x00,  // \x81 pfeil runter
 	0x08, 0x08, 0x2a, 0x1c, 0x08, 0x00,  // \x82 pfeil rechts
-	0x08, 0x1c, 0x2a, 0x08, 0x08, 0x00   // \x83 pfeil links
+	0x08, 0x1c, 0x2a, 0x08, 0x08, 0x00,  // \x83 pfeil links
+	0x3D, 0x7D, 0x40, 0x7D, 0x7D, 0x00,  // \x84 ü
+	0x39, 0x7D, 0x44, 0x7D, 0x39, 0x00,  // \x85 ö
 };
 
 // Text in die 1. OSD-Zeile drucken
 static void drawtext(char* txt, int count, int pos, int fill, bool selected)
 {
-	char color = selected ? 0x03 : (pos>64 ? 0x2a : 0x3f);
-	char bkcolor = selected ? 0x15 : 0;
+	char color = selected ? 0x03 : ((pos>64 && count>1) ? 0x1a : 0x3f);
+	char bkcolor = selected ? 0x25 : 0;
 	for (int a=0;a<fill;a++)
 	{
 		for (int b=0;b<6;b++)
 		{
+			if (b+(pos+a)*7 >= ABG_XRes) return;
 			char c=0;
 			if (a<count)
 			{
@@ -169,6 +172,7 @@ static void drawhint(char* txt, int count, int pos, int fill)
 	{
 		for (int b=0;b<6;b++)
 		{
+			if (b+(pos+a)*7 >= ABG_XRes) return;
 			char c=0;
 			if (a<count)
 			{
@@ -176,7 +180,7 @@ static void drawhint(char* txt, int count, int pos, int fill)
 			}
 			for (int d=0;d<7;d++)
 			{
-				OSD_BUF[b+(pos+a)*7+(d+11)*640] = (((1 << d) & c) != 0) ? 0x2a : 0x00;
+				OSD_BUF[b+(pos+a)*7+(d+11)*640] = (((1 << d) & c) != 0) ? 0x1a : 0x00;
 			}
 		}
 	}
@@ -202,6 +206,25 @@ void drawstate(char* txt, int count, int pos, int fill)
 	}
 }
 
+// Farbschema je nach Computer-Typ in Variable kopieren
+static void set_colorscheme()
+{
+	if (Current_Color_Scheme == _COLORSCHEME_COUNT)
+	{
+		for (int i=0;i<4;i++)
+		{
+			bmp_palette[i] = Custom_Colors[i];
+		}
+	}
+	else
+	{
+		for (int i=0;i<4;i++)
+		{
+			bmp_palette[i] = _STATIC_COLOR_VALS[Current_Color_Scheme].colors[_STATIC_SYS_VALS[ACTIVESYS].swap_colors[i]];
+		}
+	}
+}
+
 // 6-Bit VGA Farbe in 24-Bit BMP Farbe umrechnen
 uint32_t vga_to_bmp_color(uint8_t c)
 {
@@ -215,7 +238,7 @@ uint8_t get_osd_bmp_pixel(uint32_t index)
 	uint8_t i = bmp_osd_color_index[c];
 	if (i == 0xff) // das Erste mal für diese Farbe
 	{
-		for (uint8_t z=0; z<10; z++)	// BMP-Palette nach leerem Platz durchsuchen
+		for (uint8_t z=4; z<10; z++)	// BMP-Palette nach leerem Platz durchsuchen
 		{
 			uint32_t n = vga_to_bmp_color(c);
 			if (n == bmp_palette[z])
@@ -435,8 +458,22 @@ bool restore_settings() {
 		nvs_pixel_per_line =  _STATIC_SYS_VALS[nvs_mode].default_pixel_per_line;
 		printf("Pixelperline-Einstellung nicht gefunden, nutze default = %ld\n",nvs_pixel_per_line);
 	}
+	if (nvs_get_i8(sys_nvs_handle, _NVS_SETTING_COLORSCHEMA, &Current_Color_Scheme) != ESP_OK) {
+		Current_Color_Scheme =  0;
+		printf("Colorschema-Einstellung nicht gefunden, nutze default = %d\n",Current_Color_Scheme);
+	}
+	if (Current_Color_Scheme>_COLORSCHEME_COUNT) Current_Color_Scheme=_COLORSCHEME_COUNT;
+	if (Current_Color_Scheme<0) Current_Color_Scheme=0;
+	if (nvs_get_u32(sys_nvs_handle, _NVS_SETTING_CUSTOMCOLORS, (uint32_t*)&Custom_Colors[0]) != ESP_OK) {
+		for (int i=0;i<4;i++)
+		{
+			Custom_Colors[i] = _STATIC_COLOR_VALS[0].colors[i];
+		}
+		printf("Customcolors-Einstellung nicht gefunden, nutze default\n");
+	}
 
 	ACTIVESYS = nvs_mode;
+	set_colorscheme();
 	BSYNC_PIXEL_ABSTAND = (float)nvs_pixel_abstand / 100;
 	ABG_START_LINE = nvs_start_line;
 	ABG_PIXEL_PER_LINE = (float)nvs_pixel_per_line / 100;
@@ -448,11 +485,6 @@ bool restore_settings() {
 	nvs_get_str(sys_nvs_handle, _NVS_SETTING_SSID, wlan_ssid, &i);
 	i = 63;
 	nvs_get_str(sys_nvs_handle, _NVS_SETTING_PASSWD, wlan_passwd, &i);
-
-	for (uint8_t i=0; i<4; i++)
-	{
-		bmp_palette[i] = vga_to_bmp_color(_STATIC_SYS_VALS[ACTIVESYS].colors[i]);
-	}
 
 	printf("Zuweisung erledigt (%d, %f, %ld, %f, %d)\n", ACTIVESYS, BSYNC_PIXEL_ABSTAND, ABG_START_LINE, ABG_PIXEL_PER_LINE, wps_mode);
 
@@ -468,6 +500,8 @@ bool write_settings(bool full) {
 	uint32_t nvs_pixel_abstand = (int)(BSYNC_PIXEL_ABSTAND * 100);
 	uint32_t nvs_start_line = ABG_START_LINE;
 	uint32_t nvs_pixel_per_line = (int)(ABG_PIXEL_PER_LINE * 100);
+	int8_t nvs_current_colorscheme = Current_Color_Scheme;
+	uint32_t* nvs_custom_colors = ((uint32_t*)&Custom_Colors[0]);
 	char tb[40];
 
 	esp_err_t err;
@@ -483,6 +517,10 @@ bool write_settings(bool full) {
 		if (err != ESP_OK) valid_settings = false;
 		snprintf(tb, 40, _NVS_SETTING_PIXEL_PER_LINE, nvs_mode);
 		err = nvs_set_u32(sys_nvs_handle, tb, nvs_pixel_per_line);
+		if (err != ESP_OK) valid_settings = false;
+		err = nvs_set_i8(sys_nvs_handle, _NVS_SETTING_COLORSCHEMA, nvs_current_colorscheme);
+		if (err != ESP_OK) valid_settings = false;
+		err = nvs_set_u32(sys_nvs_handle, _NVS_SETTING_CUSTOMCOLORS, *nvs_custom_colors);
 		if (err != ESP_OK) valid_settings = false;
 	}
 
@@ -527,28 +565,37 @@ void osd_task(void*)
 		l = snprintf(tb, 40, _STATIC_SYS_VALS[ACTIVESYS].name);
 		drawtext(tb,l,16,7,cursor==1);
 		l = snprintf(tb, 40, "PZ=%.1f",ABG_PIXEL_PER_LINE);
-		drawtext(tb,l,24,10,cursor==2);
+		drawtext(tb,l,24,9,cursor==2);
 		l = snprintf(tb, 40, "PA=%.2f",BSYNC_PIXEL_ABSTAND);
-		drawtext(tb,l,35,10,cursor==3);
+		drawtext(tb,l,34,9,cursor==3);
 		l = snprintf(tb, 40, "St=%ld",ABG_START_LINE);
-		drawtext(tb,l,46,8,cursor==4);
+		drawtext(tb,l,44,6,cursor==4);
+		if (Current_Color_Scheme == _COLORSCHEME_COUNT)
+		{
+			l = snprintf(tb, 40, "FS=**");
+		}
+		else
+		{
+			l = snprintf(tb, 40, "FS=%s", _STATIC_COLOR_VALS[Current_Color_Scheme].shortname);
+		}
+		drawtext(tb,l,51,5,cursor==5);
 		l = snprintf(tb, 40, "Speicher");
-		drawtext(tb,l,55,8,cursor==5);
+		drawtext(tb,l,57,8,cursor==6);
 
 		// Frequenzen Ausgeben
 		if (bsyn_clock_diff>0 && bsyn_clock_frame>0)
 		{
 			double hfreq = 48000000.0f / (double)bsyn_clock_diff; // 200 Zeilen * 240mhz = 48000000000
 			l = snprintf(tb, 40, "H=%.3fkHz",hfreq);
-			drawtext(tb,l,65,14,false);
+			drawtext(tb,l,67,14,false);
 			hfreq = 240000000.0f / (double)bsyn_clock_frame; // 240mhz
 			l = snprintf(tb, 20, "V=%.3fHz",hfreq);
-			drawtext(tb,l,78,12,false);
+			drawtext(tb,l,79,12,false);
 		}
 		else
 		{
 			l = snprintf(tb, 40, "H=none");
-			drawtext(tb,l,65,14,false);
+			drawtext(tb,l,67,14,false);
 			l = snprintf(tb, 20, "V=none");
 			drawtext(tb,l,78,12,false);
 		}
@@ -567,18 +614,9 @@ void osd_task(void*)
 				}
 				break;
 			case 1:
-				switch (ACTIVESYS)
-				{
-					case 0:
-						l = snprintf(tb, 90, "Computer-Typ \x7endern  \x80=%s  \x81=%s  \x82=PZ  \x83=Betriebsart",_STATIC_SYS_VALS[1].name,_STATIC_SYS_VALS[2].name);
-						break;
-					case 1:
-						l = snprintf(tb, 90, "Computer-Typ \x7endern  \x80=%s  \x81=%s  \x82=PZ  \x83=Betriebsart",_STATIC_SYS_VALS[2].name,_STATIC_SYS_VALS[0].name);
-						break;
-					case 2:
-						l = snprintf(tb, 90, "Computer-Typ \x7endern  \x80=%s  \x81=%s  \x82=PZ  \x83=Betriebsart",_STATIC_SYS_VALS[0].name,_STATIC_SYS_VALS[1].name);
-						break;
-				}
+				int sysplus = (ACTIVESYS<(_SETTINGS_COUNT-1)) ? ACTIVESYS+1 : 0;
+				int sysminus = (ACTIVESYS==0) ? _SETTINGS_COUNT-1 : ACTIVESYS-1;
+				l = snprintf(tb, 90, "Computer-Typ \x7endern  \x80=%s  \x81=%s  \x82=PZ  \x83=Betriebsart",_STATIC_SYS_VALS[sysplus].name,_STATIC_SYS_VALS[sysminus].name);
 				break;
 			case 2:
 				l = snprintf(tb, 90, "Pixel pro Zeile (inklusive Vor,-und Nachlauf) \x7endern  \x80=+  \x81=-  \x82=PA  \x83=Computer-Typ");
@@ -587,10 +625,15 @@ void osd_task(void*)
 				l = snprintf(tb, 90, "Pixel Abstand (zwischen 1. Pixel und HSync) \x7endern  \x80=+  \x81=-  \x82=St  \x83=PZ");
 				break;
 			case 4:
-				l = snprintf(tb, 90, "Startzeile \x7endern  \x80= +  \x81= -  \x82=Speicher  \x83=PA");
+				l = snprintf(tb, 90, "Startzeile \x7endern  \x80= +  \x81= -  \x82=Farbschema  \x83=PA");
 				break;
 			case 5:
-				l = snprintf(tb, 90, "Einstellungen  \x80=Speichern  \x81=Reset  \x82=Laden  \x83=St");
+				int colplus = (Current_Color_Scheme<(_COLORSCHEME_COUNT-1)) ? Current_Color_Scheme+1 : 0;
+				int colminus = (Current_Color_Scheme==0) ? _COLORSCHEME_COUNT-1 : Current_Color_Scheme-1;
+				l = snprintf(tb, 90, "Farbschema \x7endern  \x80=%s  \x80(3s)=Manuelle Farben  \x81=%s  \x82=Speicher  \x83=St", _STATIC_COLOR_VALS[colplus].longname, _STATIC_COLOR_VALS[colminus].longname);
+				break;
+			case 6:
+				l = snprintf(tb, 90, "Einstellungen  \x80=Speichern  \x81=Reset  \x82=Laden  \x83=Farbschema");
 				break;
 		}
 		drawhint(tb,l,0,90);
@@ -673,7 +716,7 @@ void osd_task(void*)
 		if (gpio_get_level(PIN_NUM_TAST_RIGHT)==0)
 		{
 			cursor++;
-			if (cursor==6) {
+			if (cursor==7) {
 				nvs_saved = restore_settings();
 				cursor = 1;
 			}
@@ -717,6 +760,87 @@ void osd_task(void*)
 					nvs_saved = false;
 					break;
 				case 5:
+					Current_Color_Scheme++;
+					if (Current_Color_Scheme>=_COLORSCHEME_COUNT) Current_Color_Scheme = 0;
+					set_colorscheme();
+					nvs_saved = false;
+					i = 80;
+					while (gpio_get_level(PIN_NUM_TAST_UP)==0)
+					{
+						usleep(10000);
+						if (i==0)
+						{
+							Current_Color_Scheme = _COLORSCHEME_COUNT;
+							set_colorscheme();
+							l = snprintf(tb, 40, "FS=** 0=000 1=000 2=000 3=000");
+							drawtext(tb,l,51,40,false);
+							l = snprintf(tb, 90, "Manuelle Farben \x7endern \x80=+ \x81=- \x83\x82=R/G/B \x83\x82(3s)=zur\x84" "ck zu Farbschema");
+							drawhint(tb,l,0,90);
+							cursor = 0;
+							while (1)
+							{
+								for (int k=0;k<4;k++)
+								{
+									for (int j=0;j<3;j++)
+									{
+										char c = (Custom_Colors[k] >> ((2-j)*8) & 15) + '0';
+										if (c>'9') c+=7;
+										drawtext(&c,1,59+j+k*6,1,cursor==(k*3+j));
+									}
+								}
+								bmp_compress_osd();
+								i = 80;
+								while ((gpio_get_level(PIN_NUM_TAST_LEFT)==0 || gpio_get_level(PIN_NUM_TAST_RIGHT)==0) && i>0)
+								{
+									usleep(10000);
+									i--;
+								}
+								if (i<=0)
+								{
+									cursor = 5;
+								 	break;
+								}
+								while (gpio_get_level(PIN_NUM_TAST_UP)==0 || gpio_get_level(PIN_NUM_TAST_DOWN)==0)
+								{
+									usleep(10000);
+								}
+								while (gpio_get_level(PIN_NUM_TAST_LEFT)!=0 && gpio_get_level(PIN_NUM_TAST_UP)!=0 && gpio_get_level(PIN_NUM_TAST_DOWN)!=0 && gpio_get_level(PIN_NUM_TAST_RIGHT)!=0)
+								{
+									usleep(10000);
+								}
+								if (gpio_get_level(PIN_NUM_TAST_LEFT)==0)
+								{
+									cursor--;
+									if (cursor<0) cursor=11;
+								}
+								if (gpio_get_level(PIN_NUM_TAST_RIGHT)==0)
+								{
+									cursor++;
+									if (cursor>11) cursor=0;
+								}
+								int k = cursor / 3;
+								int j = (2-(cursor % 3)) * 8;
+								if (gpio_get_level(PIN_NUM_TAST_UP)==0)
+								{
+									int l = ((((Custom_Colors[k]>>j)+1) & 15)<<j);
+									Custom_Colors[k] = (Custom_Colors[k] & (~(255<<j))) | l | l<<4;
+									set_colorscheme();
+								}
+								if (gpio_get_level(PIN_NUM_TAST_DOWN)==0)
+								{
+									int l = ((((Custom_Colors[k]>>j)-1) & 15)<<j);
+									Custom_Colors[k] = (Custom_Colors[k] & (~(255<<j))) | l | l<<4;
+									set_colorscheme();
+								}
+							}
+							break;
+						}
+						i--;
+					}
+					l = snprintf(tb, 90, "  ");
+					drawtext(tb,l,65,2,false);
+					break;
+				case 6:
 					if (!nvs_saved) // Sicherung gegen unnötiges schreiben
 						nvs_saved = write_settings(true);
 					cursor=1;
@@ -763,6 +887,12 @@ void osd_task(void*)
 					nvs_saved = false;
 					break;
 				case 5:
+					Current_Color_Scheme--;
+					if (Current_Color_Scheme<0) Current_Color_Scheme = _COLORSCHEME_COUNT-1;
+					set_colorscheme();
+					nvs_saved = false;
+					break;
+				case 6:
 					// default Einstellungen setzen
 					BSYNC_PIXEL_ABSTAND = (float)_STATIC_SYS_VALS[ACTIVESYS].default_pixel_abstand / 100;
 					ABG_START_LINE = _STATIC_SYS_VALS[ACTIVESYS].default_start_line;

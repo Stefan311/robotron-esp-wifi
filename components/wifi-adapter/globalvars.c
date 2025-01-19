@@ -8,7 +8,7 @@
 const struct SYSSTATIC _STATIC_SYS_VALS[] = {
 	{ 
 		.name = "A7100",
-		.colors = {0, 0b00000100, 0b00001000, 0b00001100}, // 0b--rrggbb
+		.swap_colors = {0,1,2,3},
 		.bits_per_sample = 8,
 		.xres = 640,
 		.yres = 400,
@@ -18,7 +18,7 @@ const struct SYSSTATIC _STATIC_SYS_VALS[] = {
 	},
 	{ 
 		.name = "PC1715",
-		.colors = {0b00001000, 0b00000100, 0, 0b00001100}, // 0b--rrggbb
+		.swap_colors = {2,1,0,3},
 		.bits_per_sample = 4,
 		.xres = 640,
 		.yres = 299, /* 24 Zeilen (288 + Statuszeile) 299 im echten Leben*/
@@ -28,14 +28,62 @@ const struct SYSSTATIC _STATIC_SYS_VALS[] = {
 	},
 	{ 
 		.name = "EC1834",
-		.colors = {0, 0b00000100, 0b00001000, 0b00001100}, // 0b--rrggbb
+		.swap_colors = {0,1,2,3},
 		.bits_per_sample = 8,
 		.xres = 720,
 		.yres = 350,
 		.default_pixel_abstand = 10717,
 		.default_start_line = 18,
 		.default_pixel_per_line = 86400,
+	},
+	{ 
+		.name = "K7024",
+		.swap_colors = {0,2,0,3},
+		.bits_per_sample = 4,
+		.xres = 640,
+		.yres = 300,
+		.default_pixel_abstand = 15996,
+		.default_start_line = 24,
+		.default_pixel_per_line = 87200,
+	},
+	{ 
+		.name = "VIDEO3",
+		.swap_colors = {0,0,0,3},
+		.bits_per_sample = 4,
+		.xres = 640,
+		.yres = 300,
+		.default_pixel_abstand = 20640,
+		.default_start_line = 51,
+		.default_pixel_per_line = 89580,
+	},
+	{
+        .name = "VIS2A ",
+        .swap_colors = {2,1,0,3},
+        .bits_per_sample = 4,
+        .xres = 512,
+        .yres = 256,
+        .default_pixel_abstand = 19186,
+        .default_start_line = 35,
+        .default_pixel_per_line = 80000,
 	},	
+};
+
+const struct COLORSTATIC _STATIC_COLOR_VALS[] = {
+	{
+		.shortname = "GN",
+		.longname = "Gr\x84n",
+		.colors = {0x00000000, 0x00005500, 0x0000aa00, 0x0000ff00}, // 0x--rrggbb
+	},
+	{
+		.shortname = "WS",
+		.longname = "Weiss",
+		.colors = {0x00000000, 0x00555555, 0x00aaaaaa, 0x00ffffff}, // 0x--rrggbb
+	},
+	{
+		.shortname = "OR",
+		.longname = "Orange",
+		.colors = {0x00000000, 0x00552a00, 0x00aa5500, 0x00ff7f00}, // 0x--rrggbb
+	}
 };
 
 // globale Variablen
@@ -74,3 +122,5 @@ char wlan_passwd[64] = "";
 uint16_t* bmp_line_length;
 uint8_t* bmp_img;
 uint32_t bmp_palette[10] = { 0x00000000, 0x00005500, 0x0000aa00, 0x0000ff00 , 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff };
+int8_t Current_Color_Scheme = 0;
+uint32_t Custom_Colors[4];

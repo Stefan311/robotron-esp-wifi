@@ -311,6 +311,34 @@ static esp_err_t IRAM_ATTR mbmp_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+// Webseiten-Handler BMP-Screenshot
+static esp_err_t bmp_get_handler(httpd_req_t *req)
+{
+    uint32_t bmp_header[14] = {0x4d420000, 0, 0, 94, 40, ABG_XRes, ABG_YRes, 0x00040001, 2, 0, 0, 0, 10, 10 };
+    uint8_t bmp_emptyline[8] = {0xfe, 0, 0xfe, 0, ABG_XRes-(2*0xfe), 0, 0, 0};
+    uint8_t bmp_ende[2] = {0, 1};
+	update_pixel_steplist();
+	web_capture_bmp_image();
+    httpd_resp_set_type(req, "image/bmp");
+	httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=Screenshot.bmp");
+	httpd_resp_send_chunk(req, ((char*)bmp_header)+2, 54);
+	httpd_resp_send_chunk(req, (char*)bmp_palette, 40);
+	for (int32_t i=ABG_YRes-1;i>=0;i--)
+	{
+		if (bmp_line_length[i] == 0)
+		{
+			httpd_resp_send_chunk(req, (char*)bmp_emptyline, 8);
+		}
+		else
+		{
+			httpd_resp_send_chunk(req, (char*)&bmp_img[1024*i], bmp_line_length[i]);
+		}
+	}
+	httpd_resp_send_chunk(req, (char*)bmp_ende, 2);
+    httpd_resp_sendstr_chunk(req, NULL);
+    return ESP_OK;
+}
+
 // Webseiten-Handler Hauptseite
 static esp_err_t mainpage_get_handler(httpd_req_t *req)
 {
@@ -332,6 +360,12 @@ static const httpd_uri_t mainpage = {
     .handler   = mainpage_get_handler,
 };
 
+static const httpd_uri_t bmpshot = {
+    .uri       = "/screenshot.bmp",
+    .method    = HTTP_GET,
+    .handler   = bmp_get_handler,
+};
+
 // Webserver starten
 void start_webserver()
 {
@@ -346,6 +380,7 @@ void start_webserver()
     }
     httpd_register_uri_handler(web_server, &bmpstream);
     httpd_register_uri_handler(web_server, &mainpage);
+    httpd_register_uri_handler(web_server, &bmpshot);
 }
 
 // wlan starten, entweder WPS mode, oder Anmeldung am Router

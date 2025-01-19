@@ -50,7 +50,7 @@ xt_highint5:
     addi    a14, a14, 1
 
     // Warteschleife initialisieren
-    movi    a12, 55                                // Timeout-Counter (~5,5µs)
+    movi    a12, 100                                // Timeout-Counter (~10µs)
 
 xt_highint5_L2:
 
@@ -93,7 +93,7 @@ xt_highint5_L5:
     beqz    a15, xt_highint5_L3                     // wenn RUN=0 --> Ende
 
     // eine kurze Warteschleife, wir müssen sicherstellen, dass der SPI/DMA mit der vorherigen Übertragung fertig ist
-    movi    a12, 100
+    movi    a12, 10
 xt_highint5_L10:
     addi    a12, a12, -1
     bnez    a12, xt_highint5_L10
