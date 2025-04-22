@@ -1,3 +1,4 @@
 #pragma once
 
-void setup_wlan();
+void start_webserver();
+void stop_webserver();

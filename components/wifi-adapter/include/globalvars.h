@@ -1,8 +1,15 @@
 #pragma once
 
-#include <limits.h>
 #include "nvs_flash.h"
 #include "nvs.h"
+#include "freertos/FreeRTOS.h"
+#include "esp_http_server.h"
+#include "esp_wps.h"
+
+#define _SETTINGS_COUNT 6 // Anzahl unterstützter Computer (A7100,PC1715,EC1835,K7024,VIDEO3,VIS2A)
+#define _COLORSCHEME_COUNT 3 // Anzahl unterstützter Farbschema (+custom)
+#define _VGAMODE_COUNT 4 // Anzahl VGA-Modes (640x400x70, 640x480x60, 800x600x56, 800x600x60)
+#define Language_count 2
 
 // Statische Struktur - Systemkonstanten
 struct SYSSTATIC {
@@ -14,18 +21,36 @@ struct SYSSTATIC {
 	uint32_t default_pixel_abstand;
 	uint32_t default_start_line;
 	uint32_t default_pixel_per_line;
+	uint8_t default_vga_mode;
+	uint32_t accept_vga_modes;
 };
 
 // Statische Struktur - Farben
 struct COLORSTATIC {
-	char* shortname;
-	char* longname;
+	char* name[Language_count];
 	uint32_t colors[4];
+};
+
+// Statische Struktur - VGA-Modus
+struct VGASTATIC {
+	char* name;
+	uint16_t hFront;
+	uint16_t hSync;
+	uint16_t hBack;
+	uint16_t hRes;
+	uint16_t vFront;
+	uint16_t vSync;
+	uint16_t vBack;
+	uint16_t vRes;
+	uint32_t frequency;
+	uint16_t vPol;
+	uint16_t hPol;
 };
 
 // Statische Werte vorinitialisiert
 extern const struct SYSSTATIC _STATIC_SYS_VALS[];
 extern const struct COLORSTATIC _STATIC_COLOR_VALS[];
+extern const struct VGASTATIC _STATIC_VGA_VALS[];
 
 // Bezeichner für NVS KEY - max 15 Zeichen!
 #define _NVS_SETTING_MODE	"SMODE"
@@ -38,14 +63,19 @@ extern const struct COLORSTATIC _STATIC_COLOR_VALS[];
 #define _ABG_SAMPLE_BUFFER_COUNT 8
 #define _NVS_SETTING_COLORSCHEMA	"COLORSCHEMA"
 #define _NVS_SETTING_CUSTOMCOLORS	"CUSTOMCOLORS"
-
-#define _SETTINGS_COUNT 6 // Anzahl unterstützter Computer (A7100,PC1715,EC1835,K7024,VIDEO3,VIS2A)
-#define _COLORSCHEME_COUNT 3 // Anzahl unterstützter Farbschema (+custom)
+#define _NVS_SETTING_VGAMODE	"VGAMODE(%d)"
+#define _NVS_SETTING_SSID	"SSID"
+#define _NVS_SETTING_PASSWD	"PASSWD"
+#define _NVS_SETTING_TRANSPARENT "TRANSPARENT"
+#define _NVS_SETTING_ROTATE "ROTATE"
+#define _NVS_SETTING_WLANMODE "WLANMODE"
+#define _NVS_SETTING_LANGUAGE "LANGUAGE"
 
 // globale Variablen
 
 // Aktives System
 extern uint16_t ACTIVESYS;
+extern uint8_t ACTIVEVGA;
 
 extern nvs_handle_t sys_nvs_handle;
 
@@ -63,22 +93,30 @@ extern uint16_t ABG_Total_Scanlines;
 extern uint16_t ABG_Total_Scanl_Repeat;
 extern uint16_t ABG_Last_Scanl_Repeat;
 
+extern const uint16_t OSD_HIGHT;
+extern const uint16_t OSD_WIDTH;
+extern uint8_t OSD_KEY_ROTATE;
+
 extern uint8_t* PIXEL_STEP_LIST;
-extern uint8_t* OSD_BUF;
+extern uint8_t** OSD_BUF;
 extern volatile uint32_t bsyn_clock_diff;
 extern volatile uint32_t bsyn_clock_last;
 extern volatile uint32_t bsyn_clock_frame;
 extern volatile uint32_t BSYNC_SAMPLE_ABSTAND;
-extern volatile bool osd_aktiv;
-extern volatile bool osd_bmp_index;
-extern uint8_t* osd_bmp_img;
-extern uint16_t* osd_bmp_length;
 
-extern uint8_t wps_mode;
-extern char wlan_ssid[];
-extern char wlan_passwd[];
 extern uint16_t* bmp_line_length;
 extern uint8_t* bmp_img;
 extern uint32_t bmp_palette[10];
-extern int8_t Current_Color_Scheme;
+extern uint8_t Current_Color_Scheme;
 extern uint32_t Custom_Colors[4];
+
+extern uint8_t this_app_id;
+extern uint8_t next_app_id;
+
+extern char* wlan_state;
+extern char* wlan_ssid;
+extern char* ap_ssid;
+extern char* wlan_passwd;
+extern uint8_t wlan_mode;
+
+extern uint8_t Language;

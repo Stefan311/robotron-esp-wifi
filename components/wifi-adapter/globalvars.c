@@ -15,6 +15,8 @@ const struct SYSSTATIC _STATIC_SYS_VALS[] = {
 		.default_pixel_abstand = 8950,
 		.default_start_line = 32,
 		.default_pixel_per_line = 73600,
+		.default_vga_mode = 1,
+		.accept_vga_modes = 0b0000000000001111,
 	},
 	{ 
 		.name = "PC1715",
@@ -25,6 +27,8 @@ const struct SYSSTATIC _STATIC_SYS_VALS[] = {
 		.default_pixel_abstand = 15532 /* schwankt bis auf 15588 */,
 		.default_start_line = 24,
 		.default_pixel_per_line = 86410,
+		.default_vga_mode = 1,
+		.accept_vga_modes = 0b0000000000001111,
 	},
 	{ 
 		.name = "EC1834",
@@ -35,6 +39,8 @@ const struct SYSSTATIC _STATIC_SYS_VALS[] = {
 		.default_pixel_abstand = 10717,
 		.default_start_line = 18,
 		.default_pixel_per_line = 86400,
+		.default_vga_mode = 2,
+		.accept_vga_modes = 0b0000000000001100,
 	},
 	{ 
 		.name = "K7024",
@@ -45,6 +51,8 @@ const struct SYSSTATIC _STATIC_SYS_VALS[] = {
 		.default_pixel_abstand = 15996,
 		.default_start_line = 24,
 		.default_pixel_per_line = 87200,
+		.default_vga_mode = 1,
+		.accept_vga_modes = 0b0000000000001111,
 	},
 	{ 
 		.name = "VIDEO3",
@@ -55,9 +63,11 @@ const struct SYSSTATIC _STATIC_SYS_VALS[] = {
 		.default_pixel_abstand = 20640,
 		.default_start_line = 51,
 		.default_pixel_per_line = 89580,
+		.default_vga_mode = 1,
+		.accept_vga_modes = 0b0000000000001111,
 	},
 	{
-        .name = "VIS2A ",
+        .name = "VIS2A",
         .swap_colors = {2,1,0,3},
         .bits_per_sample = 4,
         .xres = 512,
@@ -65,31 +75,91 @@ const struct SYSSTATIC _STATIC_SYS_VALS[] = {
         .default_pixel_abstand = 19186,
         .default_start_line = 35,
         .default_pixel_per_line = 80000,
-	},	
+		.default_vga_mode = 1,
+		.accept_vga_modes = 0b0000000000001111,
+    },    	
 };
 
 const struct COLORSTATIC _STATIC_COLOR_VALS[] = {
 	{
-		.shortname = "GN",
-		.longname = "Gr\x84n",
+		.name = {"Gr\x84n","green"},
 		.colors = {0x00000000, 0x00005500, 0x0000aa00, 0x0000ff00}, // 0x--rrggbb
 	},
 	{
-		.shortname = "WS",
-		.longname = "Weiss",
+		.name = {"Weiss","white"},
 		.colors = {0x00000000, 0x00555555, 0x00aaaaaa, 0x00ffffff}, // 0x--rrggbb
 	},
 	{
-		.shortname = "OR",
-		.longname = "Orange",
+		.name = {"Orange","orange"},
 		.colors = {0x00000000, 0x00552a00, 0x00aa5500, 0x00ff7f00}, // 0x--rrggbb
 	}
+};
+
+const struct VGASTATIC _STATIC_VGA_VALS[] = {
+	{
+		.name="640x400x70",
+		.hFront=16,
+		.hSync=96,
+		.hBack=48,
+		.hRes=640,
+		.vFront=12,
+		.vSync=2,
+		.vBack=35,
+		.vRes=400,
+		.frequency=25175000,
+		.vPol=1,
+		.hPol=1,
+	},
+	{
+		.name="640x480x60",
+		.hFront=16,
+		.hSync=96,
+		.hBack=48,
+		.hRes=640,
+		.vFront=10,
+		.vSync=2,
+		.vBack=33,
+		.vRes=480,
+		.frequency=25175000,
+		.vPol=1,
+		.hPol=1,
+	},
+	{
+		.name="800x600x56",
+		.hFront=24,
+		.hSync=72,
+		.hBack=128,
+		.hRes=800,
+		.vFront=1,
+		.vSync=2,
+		.vBack=22,
+		.vRes=600,
+		.frequency=36000000,
+		.vPol=1,
+		.hPol=1,
+	},
+	{
+		.name="800x600x60",
+		.hFront=40,
+		.hSync=128,
+		.hBack=88,
+		.hRes=800,
+		.vFront=1,
+		.vSync=4,
+		.vBack=23,
+		.vRes=600,
+		.frequency=40000000,
+		.vPol=1,
+		.hPol=1,
+	},
 };
 
 // globale Variablen
 
 // Aktives System
 uint16_t ACTIVESYS = 0;
+uint8_t ACTIVEVGA = 1;
+
 nvs_handle_t sys_nvs_handle;
 volatile uint32_t* ABG_DMALIST;
 volatile uint32_t ABG_Scan_Line = 0;
@@ -104,23 +174,31 @@ uint8_t ABG_Bits_per_sample = 0;
 uint16_t ABG_Total_Scanlines = 0;
 uint16_t ABG_Total_Scanl_Repeat = 0;
 uint16_t ABG_Last_Scanl_Repeat = 0;
+uint16_t* bmp_line_length = NULL;
+uint8_t* bmp_img = NULL;
+uint32_t bmp_palette[10];
+
+const uint16_t OSD_HIGHT = 164;
+const uint16_t OSD_WIDTH = 158;
+uint8_t OSD_KEY_ROTATE = 0;
 
 uint8_t* PIXEL_STEP_LIST;
-uint8_t* OSD_BUF;
+uint8_t** OSD_BUF;
 volatile uint32_t bsyn_clock_diff = 0;
 volatile uint32_t bsyn_clock_last = 0;
 volatile uint32_t bsyn_clock_frame = 0;
 volatile uint32_t BSYNC_SAMPLE_ABSTAND = 0;
-volatile bool osd_aktiv = false;
-volatile bool osd_bmp_index = false;
-uint8_t* osd_bmp_img;
-uint16_t* osd_bmp_length;
 
-uint8_t wps_mode = 0;
-char wlan_ssid[64] = "";
-char wlan_passwd[64] = "";
-uint16_t* bmp_line_length;
-uint8_t* bmp_img;
+uint8_t this_app_id;
+uint8_t next_app_id;
+
+char* wlan_state = NULL;
+char* wlan_ssid = NULL;
+char* ap_ssid = NULL;
+char* wlan_passwd = NULL;
+uint8_t wlan_mode = 0;
+
+uint8_t Language = 0;
 uint32_t bmp_palette[10] = { 0x00000000, 0x00005500, 0x0000aa00, 0x0000ff00 , 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff };
-int8_t Current_Color_Scheme = 0;
+uint8_t Current_Color_Scheme = 0;
 uint32_t Custom_Colors[4];
