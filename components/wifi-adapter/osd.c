@@ -138,7 +138,7 @@ char* osd_ovrstatus = NULL;
 bool osd_repeat = false;
 wifi_ap_record_t* ap_list = NULL;
 uint16_t ap_count = 0;
-
+bool unsaved = false;
 
 enum MENUTYPE 
 {
@@ -244,7 +244,7 @@ const struct MENUITEM osd_menu[] =
 		.value3 = 100,
 	},
 	{
-		.name = {"Ausgang","Output"},
+		.name = {"Ausgang \xfeWLAN-Stream\xff","Output"},
 		.typ = MT_SEPARATOR,
 	},
 	{
@@ -336,12 +336,14 @@ const char* TextSet[Language_count] = {"Gesetzt","Entered"};
 const char* TextLoaded[Language_count] = {"Geladen","Loaded"};
 const char* TextSaved[Language_count] = {"Gespeichert","Saved"};
 const char* TextNone[Language_count] = {"Keins","None"};
+const char* TextUnsaved[Language_count] = {"\xfe""Einstellung ge\x7endert\xff","\xfeUnsaved setting\xff"};
 
 static void draw_text_color(const char* txt, uint8_t count, uint16_t xpos, uint16_t ypos, uint8_t color, uint8_t bkcolor)
 {
 	bool run=true;
 	uint16_t x = xpos;
 	uint16_t y = ypos;
+	uint8_t c_color = color;
 	for (int a=0;a<count;a++)
 	{
 		if (y+font_h>=OSD_HIGHT) return;
@@ -349,6 +351,16 @@ static void draw_text_color(const char* txt, uint8_t count, uint16_t xpos, uint1
 		{
 			y += font_h;
 			x = xpos;
+		}
+		else if (txt[a]=='\xfe')
+		{
+			c_color = Color_TextHiLight;
+			continue;
+		}
+		else if (txt[a]=='\xff')
+		{
+			c_color = color;
+			continue;
 		}
 		else
 		{
@@ -371,7 +383,7 @@ static void draw_text_color(const char* txt, uint8_t count, uint16_t xpos, uint1
 				if (b+x>=OSD_WIDTH-4) return;
 				for (int d=0;d<font_w;d++)
 				{
-					OSD_BUF[y+d+2][b+x+2] = (((1 << d) & c) != 0) ? color : bkcolor;
+					OSD_BUF[y+d+2][b+x+2] = (((1 << d) & c) != 0) ? c_color : bkcolor;
 				}
 				OSD_BUF[y+1][x+b+2] = bkcolor;
 				OSD_BUF[y+9][x+b+2] = bkcolor;
@@ -436,7 +448,14 @@ static void draw_status_line()
 				snprintf(tb, 40, wlan_state);
 				break;
 			case 3:
-				snprintf(tb, 40, "Version 2.0 beta 1");
+				if (unsaved)
+				{
+					snprintf(tb, 40, TextUnsaved[Language]);
+				}
+				else
+				{
+					snprintf(tb, 40, "Version 2.0 beta 2");
+				}
 				break;
 			default:
 				if (bsyn_clock_diff>0 && bsyn_clock_frame>0)
@@ -863,6 +882,7 @@ void osd_task(void*)
 								uint8_t q = 3<<(p*2);
 								Custom_Colors[o] = (((Custom_Colors[o] & q)+0b10101) & q) | (Custom_Colors[o] & (q^0xff));
 								set_colorscheme();
+								unsaved = true;
 								break;
 							case 5: //Wlan-modus
 								if (osd_repeat)
@@ -871,6 +891,7 @@ void osd_task(void*)
 									setup_wlan(wlan_mode);
 									menu_subsel = 0;
 									osd_ovrstatus[0] = 0;
+									unsaved = true;
 								}
 								break;
 							case 7: // SSID
@@ -884,6 +905,7 @@ void osd_task(void*)
 										free(ap_list);
 										ap_list = NULL;
 									}
+									unsaved = true;
 								}
 								break;
 							case 8: // passwort
@@ -917,6 +939,7 @@ void osd_task(void*)
 									menu_subsel = 0;
 									osd_ovrstatus[0] = 0;
 									while (gpio_get_level(MAP_PIN_LEFT)==0 || gpio_get_level(MAP_PIN_UP)==0 || gpio_get_level(MAP_PIN_DOWN)==0 || gpio_get_level(MAP_PIN_RIGHT)==0);
+									unsaved = true;
 								}
 								break;
 							default:
@@ -970,6 +993,7 @@ void osd_task(void*)
 								uint8_t q = 3<<(p*2);
 								Custom_Colors[o] = (((Custom_Colors[o] & q)-(0b10101 & q)) & q) | (Custom_Colors[o] & (q^0xff));
 								set_colorscheme();
+								unsaved = true;
 								break;
 							case 7: //SSID
 								menu_subsel = 0;
@@ -1036,11 +1060,19 @@ void osd_task(void*)
 			{
 				case MT_INTVALUE:
 					uint32_t* v = (uint32_t*)osd_menu[menu_sel].value1;
-					if (*v>osd_menu[menu_sel].value2) *v = *v - 1;
+					if (*v>osd_menu[menu_sel].value2)
+					{
+						*v = *v - 1;
+						unsaved = true;
+					}
 					break;
 				case MT_REALVALUE:
 					double* w = (double*)osd_menu[menu_sel].value1;
-					if (*w>osd_menu[menu_sel].value2) *w = *w - ((double)osd_menu[menu_sel].value5 / (osd_repeat ? 200.0 : 1000.0));
+					if (*w>osd_menu[menu_sel].value2)
+					{
+						*w = *w - ((double)osd_menu[menu_sel].value5 / (osd_repeat ? 200.0 : 1000.0));
+						unsaved = true;
+					}
 					break;
 				case MT_ENUM:
 					switch (osd_menu[menu_sel].value1)
@@ -1070,14 +1102,12 @@ void osd_task(void*)
 							}
 							while (((1 << ACTIVEVGA) & _STATIC_SYS_VALS[ACTIVESYS].accept_vga_modes) == 0);
 							setup_vga_mode();
+							unsaved = true;
 							break;
 						case 3: // Farbschema, Auswahl
 							Current_Color_Scheme--;
 							if (Current_Color_Scheme>_COLORSCHEME_COUNT) Current_Color_Scheme = _COLORSCHEME_COUNT;
 							set_colorscheme();
-							break;
-							if (menu_subsel>0 && !osd_repeat) menu_subsel--;
-							break;
 							break;
 						case 4: // Farbschema, Anwenderfarben
 							if (menu_subsel>0 && !osd_repeat) menu_subsel--;
@@ -1105,6 +1135,7 @@ void osd_task(void*)
 								menu_subsel = 0;
 								osd_ovrstatus[0] = 0;
 								setup_wlan(wlan_mode);
+								unsaved = true;
 								while (gpio_get_level(MAP_PIN_LEFT)==0 || gpio_get_level(MAP_PIN_UP)==0 || gpio_get_level(MAP_PIN_DOWN)==0 || gpio_get_level(MAP_PIN_RIGHT)==0);
 							}
 							break;
@@ -1118,6 +1149,7 @@ void osd_task(void*)
 							break;
 						case 10: // Sprache
 							Language = (Language-1) & 1;
+							unsaved = true;
 							break;
 						case 12: // Keybinding
 							if (menu_subsel==0)
@@ -1141,11 +1173,19 @@ void osd_task(void*)
 			{
 				case MT_INTVALUE:
 					uint32_t* v = (uint32_t*)osd_menu[menu_sel].value1;
-					if (*v<osd_menu[menu_sel].value3) *v = *v + 1;
+					if (*v<osd_menu[menu_sel].value3)
+					{
+						*v = *v + 1;
+						unsaved = true;
+					}
 					break;
 				case MT_REALVALUE:
 					double* w = (double*)osd_menu[menu_sel].value1;
-					if (*w<osd_menu[menu_sel].value3) *w = *w + ((double)osd_menu[menu_sel].value5 / (osd_repeat ? 200.0 : 1000.0));
+					if (*w<osd_menu[menu_sel].value3)
+					{
+						*w = *w + ((double)osd_menu[menu_sel].value5 / (osd_repeat ? 200.0 : 1000.0));
+						unsaved = true;
+					}
 					break;
 				case MT_ENUM:
 					switch (osd_menu[menu_sel].value1)
@@ -1175,11 +1215,13 @@ void osd_task(void*)
 							}
 							while (((1 << ACTIVEVGA) & _STATIC_SYS_VALS[ACTIVESYS].accept_vga_modes) == 0);
 							setup_vga_mode();
+							unsaved = true;
 							break;
 						case 3: // Farbschema, Auswahl
 							Current_Color_Scheme++;
 							if (Current_Color_Scheme>_COLORSCHEME_COUNT) Current_Color_Scheme = 0;
 							set_colorscheme();
+							unsaved = true;
 							break;
 						case 4: // Farbschema, Anwenderfarben
 							if (menu_subsel<12 && !osd_repeat) menu_subsel++;
@@ -1238,6 +1280,7 @@ void osd_task(void*)
 							break;
 						case 10: // Sprache
 							Language = (Language+1) & 1;
+							unsaved = true;
 							break;
 						case 12: // Keybinding
 							if (menu_subsel==0)
@@ -1268,6 +1311,7 @@ void osd_task(void*)
 								write_settings(true);
 								draw_text_value(TextSaved[Language], menu_row);
 								while (gpio_get_level(MAP_PIN_LEFT)==0 || gpio_get_level(MAP_PIN_UP)==0 || gpio_get_level(MAP_PIN_DOWN)==0 || gpio_get_level(MAP_PIN_RIGHT)==0);
+								unsaved = false;
 							}
 							break;
 					}
