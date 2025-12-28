@@ -7,6 +7,7 @@
 #include "osd.h"
 #include "vga.h"
 #include "wlan.h"
+#include "cmdline.h"
 
 
 #define Color_Back 0
@@ -454,7 +455,7 @@ static void draw_status_line()
 				}
 				else
 				{
-					snprintf(tb, 40, "Version 2.0 beta 2");
+					snprintf(tb, 40, "Version %s",VERSION);
 				}
 				break;
 			default:
@@ -837,6 +838,7 @@ void osd_task(void*)
 		while (gpio_get_level(MAP_PIN_LEFT)==0 || gpio_get_level(MAP_PIN_UP)==0 || gpio_get_level(MAP_PIN_DOWN)==0 || gpio_get_level(MAP_PIN_RIGHT)==0)
 		{
 			usleep(10000);
+			run_cmdline();
 			l--;
 			if (l==0)
 			{
@@ -852,6 +854,7 @@ void osd_task(void*)
 			osd_repeat = false;
 			if ((i & 15)==15) draw_status_line();
 			usleep(10000);
+			run_cmdline();
 			if (i==1)
 			{
 				break;
@@ -1108,6 +1111,7 @@ void osd_task(void*)
 							Current_Color_Scheme--;
 							if (Current_Color_Scheme>_COLORSCHEME_COUNT) Current_Color_Scheme = _COLORSCHEME_COUNT;
 							set_colorscheme();
+							unsaved = true;
 							break;
 						case 4: // Farbschema, Anwenderfarben
 							if (menu_subsel>0 && !osd_repeat) menu_subsel--;
